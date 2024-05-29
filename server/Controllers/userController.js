@@ -12,10 +12,12 @@ const { generateToken } = require("../Utils/tokenUtils");
 
 const generateAndSendOTP = async (user) => {
   const otp = generateOTP();
-  const otpExpiry = Date.now() + 10 * 60 * 1000;
+  const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
   user.otp = otp;
   user.otpExpiry = otpExpiry;
+
+  console.log('Generated OTP:', otp, 'for user:', user.email);
 
   await user.save();
   await sendOTPEmail(user.name, user.email, otp);
@@ -24,7 +26,10 @@ const generateAndSendOTP = async (user) => {
 const verifyOTP = async (email, otp) => {
   const user = await UserModel.findOne({ email });
 
+  console.log('Verifying OTP for email:', email, 'OTP:', otp);
+
   if (!user || user.otp !== otp || user.otpExpiry < Date.now()) {
+    console.log('OTP verification failed:', { user: !!user, correctOtp: user && user.otp === otp, notExpired: user && user.otpExpiry >= Date.now() });
     throw new Error("Invalid or expired OTP");
   }
 
@@ -32,8 +37,11 @@ const verifyOTP = async (email, otp) => {
   user.otpExpiry = null;
   await user.save();
 
+  console.log('OTP verified successfully for user:', email);
+
   return user;
 };
+
 
 const register = async (req, res) => {
   const { name, email, password } = req.body;
@@ -159,84 +167,147 @@ const loginOtpVerify = async (req, res) => {
   }
 };
 
-const getUserProfile = async (req, res) => {
-  const { id } = req.params;
+// const editUser = async (req, res) => {
+//   const { id } = req.params;
+//   const { name, password } = req.body;
+//   const { otp } = req.body;
+
+//   try {
+//     const user = await UserModel.findById(id);
+//     if (!user) {
+//       return res.status(404).send({ message: "User Not Found" });
+//     }
+
+//     // Generate and send OTP if it's not already in request
+//     if (!otp) {
+//       await generateAndSendOTP(user);
+//       return res.status(200).send({ message: "OTP sent to email" });
+//     }
+
+//     // Verify OTP
+//     const verifiedUser = await verifyOTP(user.email, otp);
+
+//     // Update user details
+//     if (name) {
+//       verifiedUser.name = name;
+//     }
+//     if (password) {
+//       verifiedUser.password = await bcrypt.hash(password, 10);
+//     }
+
+//     await verifiedUser.save();
+
+//     res
+//       .status(200)
+//       .send({ message: "User Updated Successfully", data: verifiedUser });
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).send({ message: "Failed to Edit data" });
+//   }
+// };
+
+const sendOtp = async (req, res) => {
+  const { email } = req.body;
 
   try {
-    const user = await UserModel.findById(id).select("-password");
+    const user = await UserModel.findOne({ email });
     if (!user) {
-      return res.status(404).send({ message: "User not found" });
-    }
-    res.status(200).send(user);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Internal Server Issue" });
-  }
-};
-// Send OTP for profile update
-const sendUpdateOtp = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const user = await UserModel.findById(id);
-    if (!user) {
-      return res.status(404).send({ message: "User not found" });
+      return res.status(404).json({ message: "User not found" });
     }
 
     const otp = generateOTP();
-    const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes expiry
+    const otpExpiry = Date.now() + 10 * 60 * 1000;
 
     user.otp = otp;
     user.otpExpiry = otpExpiry;
-    await user.save();
 
+    await user.save();
     await sendOTPEmail(user.name, user.email, otp);
-    res.status(200).send({ message: "OTP sent to your email" });
+
+    res.status(201).json({ message: "OTP Sent to Your email. Please Verify" });
   } catch (error) {
     console.error(error);
-    res.status(500).send({ message: "Internal Server Issue" });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
-// Middleware to verify OTP
-const verifyUpdateOtp = async (req, res, next) => {
-  const { id } = req.params;
-  const { otp } = req.body;
+
+const verifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
 
   try {
-    const user = await UserModel.findById(id);
+    const user = await UserModel.findOne({ email });
+
     if (!user || user.otp !== otp || user.otpExpiry < Date.now()) {
-      return res.status(400).send({ message: "Invalid or expired OTP" });
+      return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
     user.otp = null;
     user.otpExpiry = null;
     await user.save();
 
-    next();
+    res.status(200).json({ message: "OTP Verified" });
   } catch (error) {
     console.error(error);
-    res.status(500).send({ message: "Internal Server Issue" });
+    res.status(500).json({ message: "Internal Server Error" });
   }
-};// Update user profile
-const updateUserProfile = async (req, res) => {
+};
+
+
+
+const editUser = async (req, res) => {
   const { id } = req.params;
-  const { name, password } = req.body;
+  const { name, password, otp } = req.body;
+
+  console.log('Update profile request received:', { id, name, password, otp });
+  console.log('Request payload:', req.body);
 
   try {
     const user = await UserModel.findById(id);
     if (!user) {
-      return res.status(404).send({ message: "User not found" });
+      console.log('User not found');
+      return res.status(404).json({ message: "User Not Found" });
     }
 
-    user.name = name || user.name;
-    user.password = password || user.password;
+    // Logging current OTP and expiry time
+    console.log('Stored OTP:', user.otp);
+    console.log('Stored OTP Expiry:', user.otpExpiry);
+    console.log('Current Time:', Date.now());
 
-    const updatedUser = await user.save();
-    res.status(200).send({ message: "User profile updated", user: updatedUser });
+    // Verify OTP
+    if (user.otp !== otp) {
+      console.log('Invalid OTP');
+      return res.status(400).json({ message: 'Invalid OTP' });
+    }
+
+    if (user.otpExpiry < Date.now()) {
+      console.log('Expired OTP');
+      return res.status(400).json({ message: 'Expired OTP' });
+    }
+
+    // Update user details
+    if (name) {
+      user.name = name;
+    }
+    if (password) {
+      user.password = await bcrypt.hash(password, 10);
+      console.log("user Password: " + user.password);
+    }
+
+    // Clear OTP fields
+    user.otp = null;
+    user.otpExpiry = null;
+
+    await user.save();
+
+    console.log('User updated successfully');
+    res.status(200).json({ message: "User Updated Successfully", data: user });
   } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Internal Server Issue" });
+    console.error('Error updating user:', error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
-module.exports = { register, VerifyOtp, login, loginOtpVerify,getUserProfile,sendUpdateOtp, verifyUpdateOtp,updateUserProfile};
+
+
+
+module.exports = { register, VerifyOtp, login, loginOtpVerify,sendOtp, verifyOtp, editUser};

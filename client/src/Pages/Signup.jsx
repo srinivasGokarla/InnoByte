@@ -42,6 +42,7 @@ function Singup() {
       dispatch(signupFailure(error.message));
     }
   };
+  
   return (
     <>
       <Container>

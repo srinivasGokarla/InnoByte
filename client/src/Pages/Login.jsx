@@ -7,21 +7,110 @@ import {
   useToast,
   Container,
   Text,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
+import { useDispatch } from "react-redux";
+import { loginSuccess } from "../Redux/Auth/authSlice";
 
 function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const handleSubmit = (e) => {
+  const [email, setEmail] = useState("srinivasgokarla270@gmail.com");
+  const [password, setPassword] = useState("123456");
+  const [otp, setOtp] = useState("");
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const toast = useToast();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log(email, password);
+    try {
+      // Simulate login API call
+      const res = await axios.post("http://localhost:8000/api/auth/login", {
+        email,
+        password,
+      });
+      console.log(res.data);
+
+      if (res.data && res.status === 200) {
+        onOpen();
+      } else {
+        toast({
+          title: "Login failed.",
+          description: "Invalid credentials.",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      toast({
+        title: "An error occurred.",
+        description: "Unable to login. Please try again later.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
   };
+
+  const handleOtpSubmit = async () => {
+    try {
+      // Simulate OTP verification API call
+      const res = await axios.post(
+        "http://localhost:8000/api/auth/verify-login",
+        {
+          email,
+          otp,
+        }
+      );
+      console.log(res.data);
+
+      if (
+        (res.data && res.status === 200) ||
+        res.data.message == "Login successful"
+      ) {
+        toast({
+          title: "Login successful.",
+          description: "Welcome back!",
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+        });
+        dispatch(loginSuccess(res.data));
+        navigate("/profile");
+      } else {
+        toast({
+          title: "OTP verification failed.",
+          description: "Please check the OTP and try again.",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error("OTP verification error:", error);
+      toast({
+        title: "An error occurred.",
+        description: "Unable to verify OTP. Please try again later.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
   return (
     <>
-      {" "}
       <Container>
         <Text fontSize={"5xl"} textAlign={"center"}>
           Signin
@@ -48,15 +137,42 @@ function Login() {
               Login
             </Button>
           </form>
-          <Text>
+          <Text mt={4}>
             Don't You Have an Account{" "}
             <span style={{ color: "red", fontWeight: "bold" }}>
               <Link to={"/"}>Signup</Link>
-            </span>{" "}
+            </span>
           </Text>
         </Box>
       </Container>
+
+      <Modal isOpen={isOpen} onClose={onClose}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Enter OTP</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <FormControl>
+              <FormLabel>OTP</FormLabel>
+              <Input
+                type="text"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                placeholder="Enter OTP"
+              />
+            </FormControl>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button colorScheme="teal" onClick={handleOtpSubmit}>
+              Verify OTP
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </>
   );
 }
+
 export default Login;
+
